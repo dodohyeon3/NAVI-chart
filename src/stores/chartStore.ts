@@ -3,13 +3,13 @@ import type { IndicatorSlug, CandleData } from '@/types'
 import type { Period } from '@/data/mockCandles'
 
 export type TimeUnit    = 'daily' | 'weekly' | 'monthly'
-export type DrawingTool = 'none' | 'trendline' | 'hline' | 'erase'
+export type DrawingTool = 'none' | 'trendline' | 'fibonacci' | 'erase'
 
 interface ChartState {
   // 차트 데이터
-  candleData: CandleData[]
-  isLoading:  boolean
-  error:      string | null
+  candleData:    CandleData[]
+  isLoading:     boolean
+  error:         string | null
   setCandleData: (data: CandleData[]) => void
   setLoading:    (v: boolean) => void
   setError:      (msg: string | null) => void
@@ -21,14 +21,16 @@ interface ChartState {
   setTimeUnit: (u: TimeUnit) => void
 
   // 지표
-  activeIndicators:  Set<IndicatorSlug>
-  hoveredIndicator:  IndicatorSlug | null
-  toggleIndicator:   (slug: IndicatorSlug) => void
+  activeIndicators:    Set<IndicatorSlug>
+  hoveredIndicator:    IndicatorSlug | null
+  toggleIndicator:     (slug: IndicatorSlug) => void
   setHoveredIndicator: (slug: IndicatorSlug | null) => void
 
   // 작도 도구
   drawingTool:    DrawingTool
+  drawingStep:    0 | 1       // 0: 시작 전, 1: 첫 번째 점 찍은 후
   setDrawingTool: (t: DrawingTool) => void
+  setDrawingStep: (s: 0 | 1) => void
 }
 
 export const useChartStore = create<ChartState>((set) => ({
@@ -55,5 +57,7 @@ export const useChartStore = create<ChartState>((set) => ({
   setHoveredIndicator: (hoveredIndicator) => set({ hoveredIndicator }),
 
   drawingTool:    'none',
-  setDrawingTool: (drawingTool) => set({ drawingTool }),
+  drawingStep:    0,
+  setDrawingTool: (drawingTool) => set({ drawingTool, drawingStep: 0 }),
+  setDrawingStep: (drawingStep) => set({ drawingStep }),
 }))

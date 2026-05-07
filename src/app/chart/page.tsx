@@ -62,16 +62,25 @@ export default function ChartPage() {
           {showMACD && <MACDChart />}
         </RoundedCard>
 
-        {/* 분석 도구 */}
-        <div className="mt-4">
-          <p className="text-xs text-navi-muted mb-2">분석 도구 — 클릭하면 차트에 나타나요</p>
-          <IndicatorToolbar />
-        </div>
+        {/* 도구 섹션 */}
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* 분석 도구 */}
+          <div className="bg-navi-surface border border-navi-border rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-bold text-navi-text">분석 도구</span>
+              <span className="text-xs text-navi-muted">클릭하면 차트에 표시돼요</span>
+            </div>
+            <IndicatorToolbar />
+          </div>
 
-        {/* 작도 도구 */}
-        <div className="mt-3">
-          <p className="text-xs text-navi-muted mb-2">직접 그려보기</p>
-          <DrawingToolbar />
+          {/* 작도 도구 */}
+          <div className="bg-navi-surface border border-navi-border rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-bold text-navi-text">작도 도구</span>
+              <span className="text-xs text-navi-muted">차트에 직접 그려봐요</span>
+            </div>
+            <DrawingToolbar />
+          </div>
         </div>
 
         {/* 지표 상세 링크 */}
