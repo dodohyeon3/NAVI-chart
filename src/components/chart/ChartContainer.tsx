@@ -10,12 +10,9 @@ import {
   type MouseEventParams,
   type Time,
 } from 'lightweight-charts'
-import { useChartStore, type DrawingTool } from '@/stores/chartStore'
-import { getCurrentData } from '@/lib/chartData'
-import {
-  calcBollingerBands,
-  calcMA,
-} from '@/lib/indicators'
+import { useChartStore } from '@/stores/chartStore'
+import { allDailyData } from '@/data/mockCandles'
+import { calcBollingerBands, calcMA } from '@/lib/indicators'
 
 type LineSeries = ISeriesApi<'Line'>
 
@@ -24,15 +21,16 @@ export function ChartContainer() {
   const chartRef     = useRef<IChartApi | null>(null)
   const candleRef    = useRef<ISeriesApi<'Candlestick'> | null>(null)
 
-  // 오버레이 지표 시리즈 refs
   const bbRef = useRef<{ upper: LineSeries; middle: LineSeries; lower: LineSeries } | null>(null)
   const maRef = useRef<{ ma20: LineSeries; ma60: LineSeries } | null>(null)
 
-  // 작도 refs
   const drawnLinesRef   = useRef<LineSeries[]>([])
   const pendingPointRef = useRef<{ time: Time; price: number } | null>(null)
 
-  const { period, timeUnit, activeIndicators, drawingTool, setDrawingTool } = useChartStore()
+  const {
+    candleData, isLoading, error,
+    activeIndicators, drawingTool, setDrawingTool,
+  } = useChartStore()
 
   // ── 차트 최초 생성 ────────────────────────────────────
   useEffect(() => {
@@ -77,37 +75,34 @@ export function ChartContainer() {
       chart.remove()
       chartRef.current  = null
       candleRef.current = null
+      bbRef.current     = null
+      maRef.current     = null
     }
   }, [])
 
-  // ── 기간·단위·지표 변경 시 데이터 동기화 ─────────────
+  // ── 데이터·지표 동기화 ───────────────────────────────
   useEffect(() => {
     const chart  = chartRef.current
     const candle = candleRef.current
-    if (!chart || !candle) return
+    if (!chart || !candle || candleData.length === 0) return
 
-    const data = getCurrentData(period, timeUnit)
-    candle.setData(data as any)
+    candle.setData(candleData as any)
     chart.timeScale().fitContent()
 
     // ── 볼린저 밴드 ──────────────────────────────────
     if (activeIndicators.has('bollinger')) {
-      const { upper, middle, lower } = calcBollingerBands(data)
-
+      const { upper, middle, lower } = calcBollingerBands(candleData)
       if (!bbRef.current) {
-        const makeLineSeries = (color: string, dash = false) =>
+        const mkLine = (color: string, dash = false) =>
           chart.addLineSeries({
-            color,
-            lineWidth: 1,
-            lineStyle: dash ? 2 : 0,
-            lastValueVisible: false,
-            priceLineVisible: false,
+            color, lineWidth: 1, lineStyle: dash ? 2 : 0,
+            lastValueVisible: false, priceLineVisible: false,
             crosshairMarkerVisible: false,
           })
         bbRef.current = {
-          upper:  makeLineSeries('#60a5fa'),
-          middle: makeLineSeries('#94a3b8', true),
-          lower:  makeLineSeries('#60a5fa'),
+          upper:  mkLine('#60a5fa'),
+          middle: mkLine('#94a3b8', true),
+          lower:  mkLine('#60a5fa'),
         }
       }
       bbRef.current.upper.setData(upper as any)
@@ -122,9 +117,8 @@ export function ChartContainer() {
 
     // ── 이동평균선 ────────────────────────────────────
     if (activeIndicators.has('moving-average')) {
-      const ma20 = calcMA(data, 20)
-      const ma60 = calcMA(data, 60)
-
+      const ma20data = calcMA(candleData, 20)
+      const ma60data = calcMA(candleData, 60)
       if (!maRef.current) {
         maRef.current = {
           ma20: chart.addLineSeries({
@@ -139,14 +133,14 @@ export function ChartContainer() {
           }),
         }
       }
-      maRef.current.ma20.setData(ma20 as any)
-      maRef.current.ma60.setData(ma60 as any)
+      maRef.current.ma20.setData(ma20data as any)
+      maRef.current.ma60.setData(ma60data as any)
     } else if (maRef.current) {
       chart.removeSeries(maRef.current.ma20)
       chart.removeSeries(maRef.current.ma60)
       maRef.current = null
     }
-  }, [period, timeUnit, activeIndicators])
+  }, [candleData, activeIndicators])
 
   // ── 작도 클릭 핸들러 ─────────────────────────────────
   const handleClick = useCallback(
@@ -160,7 +154,7 @@ export function ChartContainer() {
       const time = params.time
 
       if (drawingTool === 'hline') {
-        const allTimes = getCurrentData('ALL', 'daily').map((d) => d.time as Time)
+        const allTimes = allDailyData.map((d) => d.time as Time)
         const s = chart.addLineSeries({
           color: '#f59e0b', lineWidth: 1, lineStyle: 2,
           lastValueVisible: false, priceLineVisible: false,
@@ -178,7 +172,6 @@ export function ChartContainer() {
         } else {
           const start = pendingPointRef.current
           pendingPointRef.current = null
-
           const s = chart.addLineSeries({
             color: '#6c63ff', lineWidth: 2,
             lastValueVisible: false, priceLineVisible: false,
@@ -215,14 +208,37 @@ export function ChartContainer() {
     }
   }, [drawingTool, handleClick, setDrawingTool])
 
-  const cursor = (drawingTool === 'trendline' || drawingTool === 'hline') ? 'crosshair' : 'default'
+  const cursor = drawingTool === 'trendline' || drawingTool === 'hline'
+    ? 'crosshair' : 'default'
 
   return (
-    <div
-      id="chart-area"
-      ref={containerRef}
-      className="w-full rounded-2xl overflow-hidden"
-      style={{ cursor }}
-    />
+    <div className="relative">
+      <div
+        id="chart-area"
+        ref={containerRef}
+        className="w-full rounded-2xl overflow-hidden"
+        style={{ cursor }}
+      />
+
+      {/* 로딩 오버레이 */}
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center
+                        bg-navi-surface/80 rounded-2xl backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-6 h-6 border-2 border-navi-accent border-t-transparent
+                            rounded-full animate-spin" />
+            <p className="text-xs text-navi-muted">실시간 데이터 불러오는 중...</p>
+          </div>
+        </div>
+      )}
+
+      {/* 에러 */}
+      {error && !isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center
+                        bg-navi-surface/90 rounded-2xl">
+          <p className="text-xs text-red-400">{error}</p>
+        </div>
+      )}
+    </div>
   )
 }
