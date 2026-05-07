@@ -11,11 +11,15 @@ import { TutorialManager } from '@/components/tutorial/TutorialManager'
 import { RoundedCard } from '@/components/ui/RoundedCard'
 import { useTutorialStore } from '@/stores/tutorialStore'
 import { useChartStore } from '@/stores/chartStore'
+import { useStockData } from '@/hooks/useStockData'
 import Link from 'next/link'
 
 export default function ChartPage() {
   const { hasCompletedOnce, start } = useTutorialStore()
   const { activeIndicators } = useChartStore()
+
+  // 실제 NVDA 데이터 fetch
+  useStockData('NVDA')
 
   const showRSI  = activeIndicators.has('rsi')
   const showMACD = activeIndicators.has('macd')
@@ -39,7 +43,7 @@ export default function ChartPage() {
           </Link>
           <div className="text-center">
             <h1 className="text-navi-text font-bold text-sm">NVIDIA Corporation</h1>
-            <p className="text-navi-muted text-xs">NVDA · NASDAQ  (학습용 데이터)</p>
+            <p className="text-navi-muted text-xs">NVDA · NASDAQ</p>
           </div>
           <button onClick={start} className="text-xs text-navi-accent hover:underline">
             튜토리얼
@@ -51,7 +55,7 @@ export default function ChartPage() {
           <PeriodToolbar />
         </div>
 
-        {/* 메인 차트 */}
+        {/* 메인 차트 + 서브 차트 */}
         <RoundedCard padding="sm">
           <ChartContainer />
           {showRSI  && <RSIChart />}
@@ -60,7 +64,7 @@ export default function ChartPage() {
 
         {/* 분석 도구 */}
         <div className="mt-4">
-          <p className="text-xs text-navi-muted mb-2">분석 도구 — 버튼을 클릭하면 차트에 나타나요</p>
+          <p className="text-xs text-navi-muted mb-2">분석 도구 — 클릭하면 차트에 나타나요</p>
           <IndicatorToolbar />
         </div>
 

@@ -3,15 +3,14 @@
 import { useEffect, useRef } from 'react'
 import { createChart, ColorType, CrosshairMode } from 'lightweight-charts'
 import { useChartStore } from '@/stores/chartStore'
-import { getCurrentData } from '@/lib/chartData'
 import { calcMACD } from '@/lib/indicators'
 
 export function MACDChart() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const { period, timeUnit } = useChartStore()
+  const { candleData } = useChartStore()
 
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!containerRef.current || candleData.length === 0) return
 
     const chart = createChart(containerRef.current, {
       layout: {
@@ -23,22 +22,22 @@ export function MACDChart() {
         horzLines: { color: '#2a2a45' },
       },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: '#2a2a45', scaleMargins: { top: 0.15, bottom: 0.15 } },
+      rightPriceScale: {
+        borderColor: '#2a2a45',
+        scaleMargins: { top: 0.15, bottom: 0.15 },
+      },
       timeScale: { borderColor: '#2a2a45', timeVisible: true },
       width: containerRef.current.clientWidth,
       height: 140,
     })
 
-    const data = getCurrentData(period, timeUnit)
-    const macdData = calcMACD(data)
+    const macdData = calcMACD(candleData)
 
-    // 히스토그램 (막대)
-    const histSeries = chart.addHistogramSeries({
+    chart.addHistogramSeries({
       color: '#26a69a',
       lastValueVisible: false,
       priceLineVisible: false,
-    })
-    histSeries.setData(
+    }).setData(
       macdData
         .filter((d) => d.histogram !== null)
         .map((d) => ({
@@ -48,19 +47,15 @@ export function MACDChart() {
         })) as any
     )
 
-    // MACD 선
-    const macdSeries = chart.addLineSeries({
+    chart.addLineSeries({
       color: '#60a5fa', lineWidth: 2,
       lastValueVisible: true, priceLineVisible: false,
-    })
-    macdSeries.setData(macdData.map((d) => ({ time: d.time, value: d.macd })) as any)
+    }).setData(macdData.map((d) => ({ time: d.time, value: d.macd })) as any)
 
-    // 시그널 선
-    const signalSeries = chart.addLineSeries({
-      color: '#f97316', lineWidth: 1, lineStyle: 0,
+    chart.addLineSeries({
+      color: '#f97316', lineWidth: 1,
       lastValueVisible: true, priceLineVisible: false,
-    })
-    signalSeries.setData(
+    }).setData(
       macdData
         .filter((d) => d.signal !== null)
         .map((d) => ({ time: d.time, value: d.signal! })) as any
@@ -78,13 +73,13 @@ export function MACDChart() {
       window.removeEventListener('resize', handleResize)
       chart.remove()
     }
-  }, [period, timeUnit])
+  }, [candleData])
 
   return (
     <div className="mt-1">
       <div className="flex items-center gap-3 mb-1 px-1">
         <span className="text-xs font-semibold" style={{ color: '#60a5fa' }}>MACD (12,26,9)</span>
-        <span className="text-xs" style={{ color: '#f97316' }}>─ 시그널</span>
+        <span className="text-xs" style={{ color: '#f97316' }}>── 시그널</span>
         <span className="text-xs text-navi-muted">▌ 히스토그램</span>
       </div>
       <div ref={containerRef} className="w-full rounded-xl overflow-hidden" />
