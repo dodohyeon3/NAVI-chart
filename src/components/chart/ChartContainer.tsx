@@ -11,25 +11,40 @@ import {
   type Time,
 } from 'lightweight-charts'
 import { useChartStore } from '@/stores/chartStore'
-import { allDailyData } from '@/data/mockCandles'
 import { calcBollingerBands, calcMA } from '@/lib/indicators'
 
 type LineSeries = ISeriesApi<'Line'>
+
+// 피보나치 레벨 정의
+const FIB_LEVELS = [
+  { ratio: 0,     label: '0%',    color: '#94a3b8' },
+  { ratio: 0.236, label: '23.6%', color: '#60a5fa' },
+  { ratio: 0.382, label: '38.2%', color: '#34d399' },
+  { ratio: 0.5,   label: '50%',   color: '#fbbf24' },
+  { ratio: 0.618, label: '61.8%', color: '#f97316' },
+  { ratio: 0.786, label: '78.6%', color: '#f472b6' },
+  { ratio: 1,     label: '100%',  color: '#94a3b8' },
+]
 
 export function ChartContainer() {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef     = useRef<IChartApi | null>(null)
   const candleRef    = useRef<ISeriesApi<'Candlestick'> | null>(null)
 
+  // 오버레이 지표 refs
   const bbRef = useRef<{ upper: LineSeries; middle: LineSeries; lower: LineSeries } | null>(null)
   const maRef = useRef<{ ma20: LineSeries; ma60: LineSeries } | null>(null)
 
+  // 작도 refs
   const drawnLinesRef   = useRef<LineSeries[]>([])
   const pendingPointRef = useRef<{ time: Time; price: number } | null>(null)
+  const previewLineRef  = useRef<LineSeries | null>(null)
 
   const {
     candleData, isLoading, error,
-    activeIndicators, drawingTool, setDrawingTool,
+    activeIndicators,
+    drawingTool, drawingStep,
+    setDrawingTool, setDrawingStep,
   } = useChartStore()
 
   // ── 차트 최초 생성 ────────────────────────────────────
@@ -89,21 +104,17 @@ export function ChartContainer() {
     candle.setData(candleData as any)
     chart.timeScale().fitContent()
 
-    // ── 볼린저 밴드 ──────────────────────────────────
+    // 볼린저 밴드
     if (activeIndicators.has('bollinger')) {
       const { upper, middle, lower } = calcBollingerBands(candleData)
       if (!bbRef.current) {
-        const mkLine = (color: string, dash = false) =>
+        const mk = (color: string, dash = false) =>
           chart.addLineSeries({
             color, lineWidth: 1, lineStyle: dash ? 2 : 0,
             lastValueVisible: false, priceLineVisible: false,
             crosshairMarkerVisible: false,
           })
-        bbRef.current = {
-          upper:  mkLine('#60a5fa'),
-          middle: mkLine('#94a3b8', true),
-          lower:  mkLine('#60a5fa'),
-        }
+        bbRef.current = { upper: mk('#60a5fa'), middle: mk('#94a3b8', true), lower: mk('#60a5fa') }
       }
       bbRef.current.upper.setData(upper as any)
       bbRef.current.middle.setData(middle as any)
@@ -115,10 +126,10 @@ export function ChartContainer() {
       bbRef.current = null
     }
 
-    // ── 이동평균선 ────────────────────────────────────
+    // 이동평균선
     if (activeIndicators.has('moving-average')) {
-      const ma20data = calcMA(candleData, 20)
-      const ma60data = calcMA(candleData, 60)
+      const ma20d = calcMA(candleData, 20)
+      const ma60d = calcMA(candleData, 60)
       if (!maRef.current) {
         maRef.current = {
           ma20: chart.addLineSeries({
@@ -133,8 +144,8 @@ export function ChartContainer() {
           }),
         }
       }
-      maRef.current.ma20.setData(ma20data as any)
-      maRef.current.ma60.setData(ma60data as any)
+      maRef.current.ma20.setData(ma20d as any)
+      maRef.current.ma60.setData(ma60d as any)
     } else if (maRef.current) {
       chart.removeSeries(maRef.current.ma20)
       chart.removeSeries(maRef.current.ma60)
@@ -142,7 +153,58 @@ export function ChartContainer() {
     }
   }, [candleData, activeIndicators])
 
-  // ── 작도 클릭 핸들러 ─────────────────────────────────
+  // ── 추세선 rubber-band 미리보기 ───────────────────────
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+
+    if (drawingTool !== 'trendline') {
+      // 도구 변경 시 미리보기 선 제거
+      if (previewLineRef.current) {
+        try { chart.removeSeries(previewLineRef.current) } catch {}
+        previewLineRef.current = null
+      }
+      return
+    }
+
+    const handleMove = (params: MouseEventParams<Time>) => {
+      const pending = pendingPointRef.current
+      if (!pending || !params.time || !params.point) return
+      const price = candleRef.current?.coordinateToPrice(params.point.y)
+      if (!price) return
+      const c = chartRef.current
+      if (!c) return
+
+      if (!previewLineRef.current) {
+        previewLineRef.current = c.addLineSeries({
+          color: 'rgba(108,99,255,0.5)',
+          lineWidth: 1,
+          lineStyle: 1, // dashed
+          lastValueVisible: false,
+          priceLineVisible: false,
+          crosshairMarkerVisible: false,
+        })
+      }
+
+      const pts =
+        String(pending.time) < String(params.time)
+          ? [{ time: pending.time, value: pending.price }, { time: params.time, value: price }]
+          : [{ time: params.time, value: price }, { time: pending.time, value: pending.price }]
+
+      try { previewLineRef.current.setData(pts as any) } catch {}
+    }
+
+    chart.subscribeCrosshairMove(handleMove)
+    return () => {
+      chart.unsubscribeCrosshairMove(handleMove)
+      if (previewLineRef.current) {
+        try { chart.removeSeries(previewLineRef.current) } catch {}
+        previewLineRef.current = null
+      }
+    }
+  }, [drawingTool])
+
+  // ── 클릭 핸들러 (추세선 + 피보나치) ─────────────────
   const handleClick = useCallback(
     (params: MouseEventParams<Time>) => {
       const chart  = chartRef.current
@@ -153,51 +215,98 @@ export function ChartContainer() {
       if (price === null) return
       const time = params.time
 
-      if (drawingTool === 'hline') {
-        const allTimes = allDailyData.map((d) => d.time as Time)
-        const s = chart.addLineSeries({
-          color: '#f59e0b', lineWidth: 1, lineStyle: 2,
-          lastValueVisible: false, priceLineVisible: false,
-        })
-        s.setData([
-          { time: allTimes[0], value: price },
-          { time: allTimes[allTimes.length - 1], value: price },
-        ] as any)
-        drawnLinesRef.current.push(s)
-      }
-
+      // ── 추세선 ───────────────────────────────────────
       if (drawingTool === 'trendline') {
         if (!pendingPointRef.current) {
+          // 첫 번째 점
           pendingPointRef.current = { time, price }
+          setDrawingStep(1)
         } else {
+          // 두 번째 점 → 확정 선 그리기
           const start = pendingPointRef.current
           pendingPointRef.current = null
-          const s = chart.addLineSeries({
-            color: '#6c63ff', lineWidth: 2,
-            lastValueVisible: false, priceLineVisible: false,
+
+          // 미리보기 선 제거
+          if (previewLineRef.current) {
+            try { chart.removeSeries(previewLineRef.current) } catch {}
+            previewLineRef.current = null
+          }
+
+          const finalLine = chart.addLineSeries({
+            color: '#6c63ff',
+            lineWidth: 2,
+            lastValueVisible: false,
+            priceLineVisible: false,
           })
           const pts =
             String(start.time) < String(time)
               ? [{ time: start.time, value: start.price }, { time, value: price }]
               : [{ time, value: price }, { time: start.time, value: start.price }]
-          s.setData(pts as any)
-          drawnLinesRef.current.push(s)
+          finalLine.setData(pts as any)
+          drawnLinesRef.current.push(finalLine)
+
+          setDrawingStep(0)
+          setDrawingTool('none')
+        }
+      }
+
+      // ── 피보나치 ─────────────────────────────────────
+      if (drawingTool === 'fibonacci') {
+        if (!pendingPointRef.current) {
+          // 첫 번째 점
+          pendingPointRef.current = { time, price }
+          setDrawingStep(1)
+        } else {
+          // 두 번째 점 → 피보나치 레벨 그리기
+          const start = pendingPointRef.current
+          pendingPointRef.current = null
+
+          const priceHigh = Math.max(start.price, price)
+          const priceLow  = Math.min(start.price, price)
+          const range     = priceHigh - priceLow
+
+          // 전체 시간 범위 (데이터 전체)
+          const allData = candleRef.current
+          const timeStart = candleData[0].time as Time
+          const timeEnd   = candleData[candleData.length - 1].time as Time
+
+          FIB_LEVELS.forEach(({ ratio, label, color }) => {
+            const levelPrice = priceHigh - range * ratio
+            const s = chart.addLineSeries({
+              color,
+              lineWidth: 1,
+              lineStyle: 2, // dashed
+              title: label,
+              lastValueVisible: true,
+              priceLineVisible: false,
+            })
+            s.setData([
+              { time: timeStart, value: levelPrice },
+              { time: timeEnd,   value: levelPrice },
+            ] as any)
+            drawnLinesRef.current.push(s)
+          })
+
+          setDrawingStep(0)
           setDrawingTool('none')
         }
       }
     },
-    [drawingTool, setDrawingTool]
+    [drawingTool, setDrawingTool, setDrawingStep, candleData]
   )
 
-  // ── 작도 도구 구독 ───────────────────────────────────
+  // ── 작도 도구 클릭 구독 ──────────────────────────────
   useEffect(() => {
     const chart = chartRef.current
     if (!chart) return
 
     if (drawingTool === 'erase') {
-      drawnLinesRef.current.forEach((s) => chart.removeSeries(s))
+      drawnLinesRef.current.forEach((s) => {
+        try { chart.removeSeries(s) } catch {}
+      })
       drawnLinesRef.current = []
       pendingPointRef.current = null
+      setDrawingStep(0)
       setDrawingTool('none')
       return
     }
@@ -206,9 +315,9 @@ export function ChartContainer() {
       chart.subscribeClick(handleClick)
       return () => chart.unsubscribeClick(handleClick)
     }
-  }, [drawingTool, handleClick, setDrawingTool])
+  }, [drawingTool, handleClick, setDrawingTool, setDrawingStep])
 
-  const cursor = drawingTool === 'trendline' || drawingTool === 'hline'
+  const cursor = drawingTool !== 'none' && drawingTool !== 'erase'
     ? 'crosshair' : 'default'
 
   return (
@@ -220,7 +329,7 @@ export function ChartContainer() {
         style={{ cursor }}
       />
 
-      {/* 로딩 오버레이 */}
+      {/* 로딩 */}
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center
                         bg-navi-surface/80 rounded-2xl backdrop-blur-sm">
@@ -237,6 +346,16 @@ export function ChartContainer() {
         <div className="absolute inset-0 flex items-center justify-center
                         bg-navi-surface/90 rounded-2xl">
           <p className="text-xs text-red-400">{error}</p>
+        </div>
+      )}
+
+      {/* 첫 번째 점 찍은 후 차트 위 안내 */}
+      {drawingStep === 1 && drawingTool !== 'none' && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10
+                        px-3 py-1.5 bg-amber-500/20 border border-amber-400/40
+                        rounded-full text-xs text-amber-300 pointer-events-none">
+          {drawingTool === 'trendline' && '끝점을 클릭하세요'}
+          {drawingTool === 'fibonacci' && '반대 끝점을 클릭하세요'}
         </div>
       )}
     </div>

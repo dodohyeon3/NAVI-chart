@@ -7,22 +7,19 @@ import { useChartStore } from '@/stores/chartStore'
 import { indicators } from '@/data/indicators'
 import type { IndicatorSlug } from '@/types'
 
-const TOOLBAR_ITEMS: IndicatorSlug[] = [
+// 추세선·피보나치는 작도 도구로 분리 → 여기서 제외
+const ANALYSIS_TOOLS: IndicatorSlug[] = [
   'moving-average',
   'rsi',
   'macd',
   'bollinger',
-  'trendline',
-  'fibonacci',
 ]
 
-const SHORT_LABELS: Record<IndicatorSlug, string> = {
+const SHORT_LABELS: Partial<Record<IndicatorSlug, string>> = {
   'moving-average': 'MA',
   rsi:              'RSI',
   macd:             'MACD',
   bollinger:        'BB',
-  trendline:        '추세선',
-  fibonacci:        'Fib',
 }
 
 export function IndicatorToolbar() {
@@ -30,13 +27,10 @@ export function IndicatorToolbar() {
   const [hovered, setHovered] = useState<IndicatorSlug | null>(null)
 
   return (
-    <div
-      id="indicator-toolbar"
-      className="flex flex-wrap gap-2 items-center"
-    >
-      {TOOLBAR_ITEMS.map((slug) => {
+    <div id="indicator-toolbar" className="flex flex-wrap gap-2 items-center">
+      {ANALYSIS_TOOLS.map((slug) => {
         const indicator = indicators[slug]
-        const isActive = activeIndicators.has(slug)
+        const isActive  = activeIndicators.has(slug)
 
         return (
           <div
@@ -51,7 +45,7 @@ export function IndicatorToolbar() {
               className={clsx(
                 'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-150',
                 isActive
-                  ? 'bg-navi-accent text-white'
+                  ? 'bg-navi-accent text-white shadow-lg shadow-navi-accent/20'
                   : 'bg-navi-border text-navi-muted hover:bg-navi-accent/20 hover:text-navi-text'
               )}
             >
