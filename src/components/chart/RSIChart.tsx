@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { createChart, ColorType, CrosshairMode } from 'lightweight-charts'
 import { useChartStore } from '@/stores/chartStore'
 import { calcRSI } from '@/lib/indicators'
+import { chartSync } from '@/lib/chartSync'
 
 export function RSIChart() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -27,6 +28,8 @@ export function RSIChart() {
         scaleMargins: { top: 0.1, bottom: 0.1 },
       },
       timeScale: { borderColor: '#2a2a45', timeVisible: true },
+      handleScroll: false,
+      handleScale: false,
       width: containerRef.current.clientWidth,
       height: 140,
     })
@@ -55,6 +58,11 @@ export function RSIChart() {
 
     chart.timeScale().fitContent()
 
+    // 메인 차트 범위를 구독 → 메인이 스크롤/드래그되면 RSI도 같이 이동
+    const unsub = chartSync.subscribe((range) => {
+      chart.timeScale().setVisibleLogicalRange(range)
+    })
+
     const handleResize = () => {
       if (containerRef.current)
         chart.applyOptions({ width: containerRef.current.clientWidth })
@@ -63,6 +71,7 @@ export function RSIChart() {
 
     return () => {
       window.removeEventListener('resize', handleResize)
+      unsub()
       chart.remove()
     }
   }, [candleData])

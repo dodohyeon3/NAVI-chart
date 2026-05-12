@@ -45,9 +45,18 @@ export default function ChartPage() {
             <h1 className="text-navi-text font-bold text-sm">NVIDIA Corporation</h1>
             <p className="text-navi-muted text-xs">NVDA · NASDAQ</p>
           </div>
-          <button onClick={start} className="text-xs text-navi-accent hover:underline">
-            튜토리얼
-          </button>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/simulate"
+              className="text-xs px-2.5 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/30
+                         text-indigo-300 hover:bg-indigo-500/25 transition-colors font-medium"
+            >
+              🔮 시뮬레이션
+            </Link>
+            <button onClick={start} className="text-xs text-navi-accent hover:underline">
+              튜토리얼
+            </button>
+          </div>
         </div>
 
         {/* 기간 · 봉 단위 */}
@@ -64,8 +73,11 @@ export default function ChartPage() {
 
         {/* 도구 섹션 */}
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* 분석 도구 */}
-          <div className="bg-navi-surface border border-navi-border rounded-2xl p-4">
+          {/* 분석 도구 — overflow-visible: 툴팁이 카드 위로 올라와야 해서 필수 */}
+          <div
+            id="analysis-tools-card"
+            className="bg-navi-surface border border-navi-border rounded-2xl p-4 overflow-visible"
+          >
             <div className="flex items-center gap-2 mb-3">
               <span className="text-xs font-bold text-navi-text">분석 도구</span>
               <span className="text-xs text-navi-muted">클릭하면 차트에 표시돼요</span>
@@ -74,7 +86,10 @@ export default function ChartPage() {
           </div>
 
           {/* 작도 도구 */}
-          <div className="bg-navi-surface border border-navi-border rounded-2xl p-4">
+          <div
+            id="drawing-tools-card"
+            className="bg-navi-surface border border-navi-border rounded-2xl p-4"
+          >
             <div className="flex items-center gap-2 mb-3">
               <span className="text-xs font-bold text-navi-text">작도 도구</span>
               <span className="text-xs text-navi-muted">차트에 직접 그려봐요</span>
@@ -84,7 +99,7 @@ export default function ChartPage() {
         </div>
 
         {/* 지표 상세 링크 */}
-        <div className="mt-6">
+        <div id="indicator-links" className="mt-6">
           <p className="text-xs text-navi-muted mb-3">지표가 뭔지 더 알아보고 싶다면?</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {[

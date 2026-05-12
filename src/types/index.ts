@@ -15,6 +15,7 @@ export interface TutorialStep {
   targetSelector: string   // CSS selector for spotlight target
   title: string
   body: string
+  tips?: string[]          // 불릿 포인트 형태의 추가 안내
   position: 'top' | 'bottom' | 'left' | 'right'
 }
 

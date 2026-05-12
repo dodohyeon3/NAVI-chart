@@ -12,6 +12,7 @@ import {
 } from 'lightweight-charts'
 import { useChartStore } from '@/stores/chartStore'
 import { calcBollingerBands, calcMA } from '@/lib/indicators'
+import { chartSync } from '@/lib/chartSync'
 
 type LineSeries = ISeriesApi<'Line'>
 
@@ -121,6 +122,9 @@ export function ChartContainer() {
     chartRef.current  = chart
     candleRef.current = series
 
+    // 메인 차트를 chartSync에 등록 → RSI/MACD 서브 차트에 범위 전파
+    chartSync.register(chart)
+
     const onResize = () => {
       if (containerRef.current) {
         chart.applyOptions({ width: containerRef.current.clientWidth })
@@ -130,6 +134,7 @@ export function ChartContainer() {
     window.addEventListener('resize', onResize)
     return () => {
       window.removeEventListener('resize', onResize)
+      chartSync.unregister()
       chart.remove()
       chartRef.current = null; candleRef.current = null
       bbRef.current = null;    maRef.current = null

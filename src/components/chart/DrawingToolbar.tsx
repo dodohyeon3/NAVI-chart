@@ -37,7 +37,7 @@ export function DrawingToolbar() {
   const currentGuide = guide ? guide[drawingStep] : null
 
   return (
-    <div className="space-y-2">
+    <div id="drawing-toolbar" className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         {DRAWING_TOOLS.map((tool) => {
           const isActive = drawingTool === tool.value
