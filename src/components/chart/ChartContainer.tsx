@@ -262,6 +262,28 @@ export function ChartContainer() {
         if (!pendingPointRef.current) {
           pendingPointRef.current = { time, price }
           setDrawingStep(1)
+
+          // 첫 클릭 즉시 점 표시 (mousemove 대기 없이)
+          const canvas = canvasRef.current
+          if (canvas) {
+            const ctx = canvas.getContext('2d')
+            const px  = chart.timeScale().timeToCoordinate(time)
+            const py  = series.priceToCoordinate(price)
+            if (ctx && px !== null && py !== null) {
+              ctx.clearRect(0, 0, canvas.width, canvas.height)
+              ctx.save()
+              ctx.beginPath()
+              ctx.arc(px, py, 6, 0, Math.PI * 2)
+              ctx.fillStyle = '#6c63ff'
+              ctx.fill()
+              ctx.beginPath()
+              ctx.arc(px, py, 6, 0, Math.PI * 2)
+              ctx.strokeStyle = 'rgba(255,255,255,0.7)'
+              ctx.lineWidth = 2
+              ctx.stroke()
+              ctx.restore()
+            }
+          }
         } else {
           const start = pendingPointRef.current
           pendingPointRef.current = null
@@ -288,6 +310,28 @@ export function ChartContainer() {
         if (!pendingPointRef.current) {
           pendingPointRef.current = { time, price }
           setDrawingStep(1)
+
+          // 첫 클릭 즉시 점 표시
+          const canvas = canvasRef.current
+          if (canvas) {
+            const ctx = canvas.getContext('2d')
+            const px  = chart.timeScale().timeToCoordinate(time)
+            const py  = series.priceToCoordinate(price)
+            if (ctx && px !== null && py !== null) {
+              ctx.clearRect(0, 0, canvas.width, canvas.height)
+              ctx.save()
+              ctx.beginPath()
+              ctx.arc(px, py, 6, 0, Math.PI * 2)
+              ctx.fillStyle = '#f97316'
+              ctx.fill()
+              ctx.beginPath()
+              ctx.arc(px, py, 6, 0, Math.PI * 2)
+              ctx.strokeStyle = 'rgba(255,255,255,0.7)'
+              ctx.lineWidth = 2
+              ctx.stroke()
+              ctx.restore()
+            }
+          }
         } else {
           const start = pendingPointRef.current
           pendingPointRef.current = null
