@@ -97,7 +97,7 @@ export function MiniChartPreview({ slug }: Props) {
         { d: ma60, color: '#a78bfa' },
       ].forEach(({ d, color }) =>
         mainChart.addLineSeries({
-          color, lineWidth: 1.5,
+          color, lineWidth: 2,
           lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
         }).setData(d as any)
       )
@@ -196,7 +196,7 @@ export function MiniChartPreview({ slug }: Props) {
             .filter(d => d.histogram !== null)
             .map(d => ({ time: d.time, value: d.histogram!, color: d.histogram! >= 0 ? '#26a69a' : '#ef5350' })) as any
         )
-      subChart.addLineSeries({ color: '#60a5fa', lineWidth: 1.5, lastValueVisible: true, priceLineVisible: false })
+      subChart.addLineSeries({ color: '#60a5fa', lineWidth: 2, lastValueVisible: true, priceLineVisible: false })
         .setData(macdData.map(d => ({ time: d.time, value: d.macd })) as any)
       subChart.addLineSeries({ color: '#f97316', lineWidth: 1, lastValueVisible: true, priceLineVisible: false })
         .setData(macdData.filter(d => d.signal !== null).map(d => ({ time: d.time, value: d.signal! })) as any)
