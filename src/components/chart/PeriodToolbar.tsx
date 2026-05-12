@@ -22,7 +22,7 @@ export function PeriodToolbar() {
   const { period, timeUnit, setPeriod, setTimeUnit } = useChartStore()
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div id="period-toolbar" className="flex flex-wrap items-center gap-3">
       {/* 기간 선택 */}
       <div className="flex gap-1 bg-navi-surface border border-navi-border rounded-xl p-1">
         {PERIODS.map((p) => (
