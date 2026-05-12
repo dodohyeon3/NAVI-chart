@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { indicators } from '@/data/indicators'
 import { DifficultyBadge } from '@/components/ui/DifficultyBadge'
 import { RoundedCard } from '@/components/ui/RoundedCard'
+import { MiniChartPreview } from '@/components/chart/MiniChartPreview'
 
 interface Props {
   params: { slug: string }
@@ -33,6 +34,14 @@ export default function IndicatorDetailPage({ params }: Props) {
       </div>
 
       <div className="mt-6 space-y-4">
+        {/* 예시 차트 — 맨 위로 이동 */}
+        <RoundedCard>
+          <p className="text-xs text-navi-muted font-semibold uppercase tracking-wide mb-3">
+            실제 차트 예시
+          </p>
+          <MiniChartPreview slug={indicator.slug} />
+        </RoundedCard>
+
         {/* 설명 */}
         <RoundedCard>
           <p className="text-xs text-navi-muted font-semibold uppercase tracking-wide mb-2">
@@ -56,16 +65,6 @@ export default function IndicatorDetailPage({ params }: Props) {
               </li>
             ))}
           </ul>
-        </RoundedCard>
-
-        {/* 이미지 플레이스홀더 */}
-        <RoundedCard>
-          <p className="text-xs text-navi-muted font-semibold uppercase tracking-wide mb-3">
-            예시 차트
-          </p>
-          <div className="w-full h-40 bg-navi-bg rounded-xl flex items-center justify-center">
-            <p className="text-navi-border text-sm">예시 이미지 준비 중</p>
-          </div>
         </RoundedCard>
       </div>
 
