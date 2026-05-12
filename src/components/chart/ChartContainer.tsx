@@ -29,7 +29,7 @@ const CHART_HEIGHT = 440
 
 export function ChartContainer() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const canvasRef    = useRef<HTMLCanvasElement>(null)   // 작도 미리보기 오버레이
+  const canvasRef    = useRef<HTMLCanvasElement>(null)
   const chartRef     = useRef<IChartApi | null>(null)
   const candleRef    = useRef<ISeriesApi<'Candlestick'> | null>(null)
 
@@ -39,6 +39,10 @@ export function ChartContainer() {
   const drawnLinesRef   = useRef<LineSeries[]>([])
   const pendingPointRef = useRef<{ time: Time; price: number } | null>(null)
 
+  // ── 최신값을 ref에 동기화 (stale closure 방지) ────────
+  const drawingToolRef = useRef(useChartStore.getState().drawingTool)
+  const candleDataRef  = useRef(useChartStore.getState().candleData)
+
   const {
     candleData, isLoading, error,
     activeIndicators,
@@ -46,13 +50,16 @@ export function ChartContainer() {
     setDrawingTool, setDrawingStep,
   } = useChartStore()
 
-  // ── Canvas 크기 동기화 ────────────────────────────────
+  // ref를 항상 최신 상태로 유지
+  useEffect(() => { drawingToolRef.current = drawingTool }, [drawingTool])
+  useEffect(() => { candleDataRef.current  = candleData  }, [candleData])
+
+  // ── Canvas 동기화 ─────────────────────────────────────
   const syncCanvas = useCallback(() => {
-    const canvas    = canvasRef.current
-    const container = containerRef.current
-    if (!canvas || !container) return
-    canvas.width  = container.clientWidth
-    canvas.height = CHART_HEIGHT
+    const c = canvasRef.current, el = containerRef.current
+    if (!c || !el) return
+    c.width  = el.clientWidth
+    c.height = CHART_HEIGHT
   }, [])
 
   useEffect(() => {
@@ -61,14 +68,31 @@ export function ChartContainer() {
     return () => window.removeEventListener('resize', syncCanvas)
   }, [syncCanvas])
 
-  // ── Canvas 클리어 ─────────────────────────────────────
   const clearCanvas = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
+    const c = canvasRef.current
+    c?.getContext('2d')?.clearRect(0, 0, c.width, c.height)
   }, [])
 
-  // ── 차트 최초 생성 ────────────────────────────────────
+  // ── 점 그리기 헬퍼 ────────────────────────────────────
+  const drawDot = useCallback((
+    ctx: CanvasRenderingContext2D,
+    x: number, y: number,
+    color = '#6c63ff'
+  ) => {
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(x, y, 6, 0, Math.PI * 2)
+    ctx.fillStyle = color
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(x, y, 6, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'
+    ctx.lineWidth = 2
+    ctx.stroke()
+    ctx.restore()
+  }, [])
+
+  // ── 차트 생성 (1회) ───────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return
 
@@ -89,38 +113,32 @@ export function ChartContainer() {
     })
 
     const series = chart.addCandlestickSeries({
-      upColor:         '#26a69a',
-      downColor:       '#ef5350',
-      borderUpColor:   '#26a69a',
-      borderDownColor: '#ef5350',
-      wickUpColor:     '#26a69a',
-      wickDownColor:   '#ef5350',
+      upColor: '#26a69a', downColor: '#ef5350',
+      borderUpColor: '#26a69a', borderDownColor: '#ef5350',
+      wickUpColor: '#26a69a', wickDownColor: '#ef5350',
     })
 
     chartRef.current  = chart
     candleRef.current = series
 
-    const handleResize = () => {
-      if (!containerRef.current) return
-      chart.applyOptions({ width: containerRef.current.clientWidth })
-      syncCanvas()
+    const onResize = () => {
+      if (containerRef.current) {
+        chart.applyOptions({ width: containerRef.current.clientWidth })
+        syncCanvas()
+      }
     }
-    window.addEventListener('resize', handleResize)
-
+    window.addEventListener('resize', onResize)
     return () => {
-      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('resize', onResize)
       chart.remove()
-      chartRef.current  = null
-      candleRef.current = null
-      bbRef.current     = null
-      maRef.current     = null
+      chartRef.current = null; candleRef.current = null
+      bbRef.current = null;    maRef.current = null
     }
   }, [syncCanvas])
 
-  // ── 데이터·지표 동기화 ───────────────────────────────
+  // ── 데이터 · 지표 동기화 ─────────────────────────────
   useEffect(() => {
-    const chart  = chartRef.current
-    const candle = candleRef.current
+    const chart = chartRef.current, candle = candleRef.current
     if (!chart || !candle || candleData.length === 0) return
 
     candle.setData(candleData as any)
@@ -130,12 +148,10 @@ export function ChartContainer() {
     if (activeIndicators.has('bollinger')) {
       const { upper, middle, lower } = calcBollingerBands(candleData)
       if (!bbRef.current) {
-        const mk = (color: string, dash = false) =>
-          chart.addLineSeries({
-            color, lineWidth: 1, lineStyle: dash ? 2 : 0,
-            lastValueVisible: false, priceLineVisible: false,
-            crosshairMarkerVisible: false,
-          })
+        const mk = (color: string, dash = false) => chart.addLineSeries({
+          color, lineWidth: 1, lineStyle: dash ? 2 : 0,
+          lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+        })
         bbRef.current = { upper: mk('#60a5fa'), middle: mk('#94a3b8', true), lower: mk('#60a5fa') }
       }
       bbRef.current.upper.setData(upper as any)
@@ -154,16 +170,8 @@ export function ChartContainer() {
       const ma60d = calcMA(candleData, 60)
       if (!maRef.current) {
         maRef.current = {
-          ma20: chart.addLineSeries({
-            color: '#f59e0b', lineWidth: 1,
-            lastValueVisible: false, priceLineVisible: false,
-            crosshairMarkerVisible: false,
-          }),
-          ma60: chart.addLineSeries({
-            color: '#a78bfa', lineWidth: 1,
-            lastValueVisible: false, priceLineVisible: false,
-            crosshairMarkerVisible: false,
-          }),
+          ma20: chart.addLineSeries({ color: '#f59e0b', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false }),
+          ma60: chart.addLineSeries({ color: '#a78bfa', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false }),
         }
       }
       maRef.current.ma20.setData(ma20d as any)
@@ -175,8 +183,7 @@ export function ChartContainer() {
     }
   }, [candleData, activeIndicators])
 
-  // ── Canvas 미리보기 (crosshairMove 기반, 루프 없음) ───
-  // lightweight-charts series를 건드리지 않아 렌더 루프 없음
+  // ── Crosshair move → Canvas rubber-band (루프 없음) ───
   useEffect(() => {
     const chart  = chartRef.current
     const series = candleRef.current
@@ -187,7 +194,7 @@ export function ChartContainer() {
       return
     }
 
-    const handleMove = (params: MouseEventParams<Time>) => {
+    const onMove = (params: MouseEventParams<Time>) => {
       const canvas = canvasRef.current
       if (!canvas) return
       const ctx = canvas.getContext('2d')
@@ -198,180 +205,140 @@ export function ChartContainer() {
       const pending = pendingPointRef.current
       if (!pending || !params.point) return
 
-      // 첫 점의 현재 픽셀 좌표 (차트 스크롤/줌 대응)
       const x1 = chart.timeScale().timeToCoordinate(pending.time)
       const y1 = series.priceToCoordinate(pending.price)
       if (x1 === null || y1 === null) return
 
-      const x2 = params.point.x
-      const y2 = params.point.y
+      const { x: x2, y: y2 } = params.point
 
-      // ① 미리보기 점선
+      // 점선 미리보기
       ctx.save()
       ctx.beginPath()
       ctx.moveTo(x1, y1)
       ctx.lineTo(x2, y2)
-      ctx.strokeStyle = 'rgba(108, 99, 255, 0.75)'
+      ctx.strokeStyle = 'rgba(108,99,255,0.75)'
       ctx.lineWidth   = 1.5
       ctx.setLineDash([6, 4])
       ctx.stroke()
       ctx.restore()
 
-      // ② 첫 번째 점 — 둥근 마커
-      ctx.save()
-      ctx.beginPath()
-      ctx.arc(x1, y1, 6, 0, Math.PI * 2)
-      ctx.fillStyle = '#6c63ff'
-      ctx.fill()
-      ctx.beginPath()
-      ctx.arc(x1, y1, 6, 0, Math.PI * 2)
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)'
-      ctx.lineWidth   = 2
-      ctx.stroke()
-      ctx.restore()
+      // 첫 번째 점 마커
+      const dotColor = drawingTool === 'fibonacci' ? '#f97316' : '#6c63ff'
+      drawDot(ctx, x1, y1, dotColor)
 
-      // ③ 현재 마우스 위치 — 작은 점
+      // 현재 마우스 위치 소점
       ctx.save()
       ctx.beginPath()
-      ctx.arc(x2, y2, 4, 0, Math.PI * 2)
-      ctx.fillStyle = 'rgba(108, 99, 255, 0.5)'
+      ctx.arc(x2, y2, 3, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(108,99,255,0.5)'
       ctx.fill()
       ctx.restore()
     }
 
-    chart.subscribeCrosshairMove(handleMove)
+    chart.subscribeCrosshairMove(onMove)
     return () => {
-      chart.unsubscribeCrosshairMove(handleMove)
+      chart.unsubscribeCrosshairMove(onMove)
       clearCanvas()
     }
-  }, [drawingTool, clearCanvas])
+  }, [drawingTool, clearCanvas, drawDot])
 
-  // ── 클릭 핸들러 ──────────────────────────────────────
-  const handleClick = useCallback(
-    (params: MouseEventParams<Time>) => {
-      const chart  = chartRef.current
-      const series = candleRef.current
-      if (!chart || !series || !params.point || !params.time) return
+  // ── 클릭 핸들러 (ref 기반 → stale closure 없음) ──────
+  // drawingTool / candleData 를 ref 로 읽기 때문에
+  // handleClick 이 불필요하게 재생성되지 않음
+  const handleClick = useCallback((params: MouseEventParams<Time>) => {
+    const tool   = drawingToolRef.current
+    const data   = candleDataRef.current
+    const chart  = chartRef.current
+    const series = candleRef.current
+    if (!chart || !series || !params.point || !params.time) return
 
-      const price = series.coordinateToPrice(params.point.y)
-      if (price === null) return
-      const time = params.time
+    const price = series.coordinateToPrice(params.point.y)
+    if (price === null) return
+    const time = params.time
 
-      // ─ 추세선 ─────────────────────────────────────
-      if (drawingTool === 'trendline') {
-        if (!pendingPointRef.current) {
-          pendingPointRef.current = { time, price }
-          setDrawingStep(1)
+    const drawFirstDot = (color: string) => {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const ctx = canvas.getContext('2d')
+      const px  = chart.timeScale().timeToCoordinate(time)
+      const py  = series.priceToCoordinate(price)
+      if (ctx && px !== null && py !== null) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        drawDot(ctx, px, py, color)
+      }
+    }
 
-          // 첫 클릭 즉시 점 표시 (mousemove 대기 없이)
-          const canvas = canvasRef.current
-          if (canvas) {
-            const ctx = canvas.getContext('2d')
-            const px  = chart.timeScale().timeToCoordinate(time)
-            const py  = series.priceToCoordinate(price)
-            if (ctx && px !== null && py !== null) {
-              ctx.clearRect(0, 0, canvas.width, canvas.height)
-              ctx.save()
-              ctx.beginPath()
-              ctx.arc(px, py, 6, 0, Math.PI * 2)
-              ctx.fillStyle = '#6c63ff'
-              ctx.fill()
-              ctx.beginPath()
-              ctx.arc(px, py, 6, 0, Math.PI * 2)
-              ctx.strokeStyle = 'rgba(255,255,255,0.7)'
-              ctx.lineWidth = 2
-              ctx.stroke()
-              ctx.restore()
-            }
-          }
-        } else {
-          const start = pendingPointRef.current
-          pendingPointRef.current = null
+    // ── 추세선 ────────────────────────────────────────
+    if (tool === 'trendline') {
+      if (!pendingPointRef.current) {
+        pendingPointRef.current = { time, price }
+        setDrawingStep(1)
+        drawFirstDot('#6c63ff')
+      } else {
+        const start = pendingPointRef.current
+        pendingPointRef.current = null
 
+        const s = chart.addLineSeries({
+          color: '#6c63ff', lineWidth: 2,
+          lastValueVisible: false, priceLineVisible: false,
+        })
+        const pts = String(start.time) < String(time)
+          ? [{ time: start.time, value: start.price }, { time, value: price }]
+          : [{ time, value: price }, { time: start.time, value: start.price }]
+        s.setData(pts as any)
+        drawnLinesRef.current.push(s)
+
+        clearCanvas()
+        setDrawingStep(0)
+        setDrawingTool('none')
+      }
+    }
+
+    // ── 피보나치 ──────────────────────────────────────
+    if (tool === 'fibonacci') {
+      if (!pendingPointRef.current) {
+        pendingPointRef.current = { time, price }
+        setDrawingStep(1)
+        drawFirstDot('#f97316')
+      } else {
+        const start = pendingPointRef.current
+        pendingPointRef.current = null
+
+        const priceHigh = Math.max(start.price, price)
+        const priceLow  = Math.min(start.price, price)
+        const range     = priceHigh - priceLow
+        const t0 = (data.length > 0 ? data[0].time           : time) as Time
+        const t1 = (data.length > 0 ? data[data.length - 1].time : time) as Time
+
+        FIB_LEVELS.forEach(({ ratio, label, color }) => {
           const s = chart.addLineSeries({
-            color: '#6c63ff', lineWidth: 2,
-            lastValueVisible: false, priceLineVisible: false,
+            color, lineWidth: 1, lineStyle: 2,
+            title: label,
+            lastValueVisible: true, priceLineVisible: false,
           })
-          const pts =
-            String(start.time) < String(time)
-              ? [{ time: start.time, value: start.price }, { time, value: price }]
-              : [{ time, value: price }, { time: start.time, value: start.price }]
-          s.setData(pts as any)
+          s.setData([
+            { time: t0, value: priceHigh - range * ratio },
+            { time: t1, value: priceHigh - range * ratio },
+          ] as any)
           drawnLinesRef.current.push(s)
+        })
 
-          clearCanvas()
-          setDrawingStep(0)
-          setDrawingTool('none')
-        }
+        clearCanvas()
+        setDrawingStep(0)
+        setDrawingTool('none')
       }
+    }
+  }, [setDrawingTool, setDrawingStep, clearCanvas, drawDot])
+  // ↑ drawingTool / candleData 가 deps 에 없음 → ref 로 읽으므로 안정적
 
-      // ─ 피보나치 ───────────────────────────────────
-      if (drawingTool === 'fibonacci') {
-        if (!pendingPointRef.current) {
-          pendingPointRef.current = { time, price }
-          setDrawingStep(1)
-
-          // 첫 클릭 즉시 점 표시
-          const canvas = canvasRef.current
-          if (canvas) {
-            const ctx = canvas.getContext('2d')
-            const px  = chart.timeScale().timeToCoordinate(time)
-            const py  = series.priceToCoordinate(price)
-            if (ctx && px !== null && py !== null) {
-              ctx.clearRect(0, 0, canvas.width, canvas.height)
-              ctx.save()
-              ctx.beginPath()
-              ctx.arc(px, py, 6, 0, Math.PI * 2)
-              ctx.fillStyle = '#f97316'
-              ctx.fill()
-              ctx.beginPath()
-              ctx.arc(px, py, 6, 0, Math.PI * 2)
-              ctx.strokeStyle = 'rgba(255,255,255,0.7)'
-              ctx.lineWidth = 2
-              ctx.stroke()
-              ctx.restore()
-            }
-          }
-        } else {
-          const start = pendingPointRef.current
-          pendingPointRef.current = null
-
-          const priceHigh = Math.max(start.price, price)
-          const priceLow  = Math.min(start.price, price)
-          const range     = priceHigh - priceLow
-          const timeStart = candleData[0].time as Time
-          const timeEnd   = candleData[candleData.length - 1].time as Time
-
-          FIB_LEVELS.forEach(({ ratio, label, color }) => {
-            const levelPrice = priceHigh - range * ratio
-            const s = chart.addLineSeries({
-              color, lineWidth: 1, lineStyle: 2,
-              title: label,
-              lastValueVisible: true, priceLineVisible: false,
-            })
-            s.setData([
-              { time: timeStart, value: levelPrice },
-              { time: timeEnd,   value: levelPrice },
-            ] as any)
-            drawnLinesRef.current.push(s)
-          })
-
-          clearCanvas()
-          setDrawingStep(0)
-          setDrawingTool('none')
-        }
-      }
-    },
-    [drawingTool, setDrawingTool, setDrawingStep, candleData, clearCanvas]
-  )
-
-  // ── 클릭 구독 / 지우기 ────────────────────────────────
+  // ── 클릭 구독 — drawingTool 변경 시만 재구독 ─────────
   useEffect(() => {
     const chart = chartRef.current
     if (!chart) return
 
+    // 지우기
     if (drawingTool === 'erase') {
-      drawnLinesRef.current.forEach((s) => { try { chart.removeSeries(s) } catch {} })
+      drawnLinesRef.current.forEach(s => { try { chart.removeSeries(s) } catch {} })
       drawnLinesRef.current = []
       pendingPointRef.current = null
       clearCanvas()
@@ -380,18 +347,17 @@ export function ChartContainer() {
       return
     }
 
-    if (drawingTool !== 'none') {
-      chart.subscribeClick(handleClick)
-      return () => chart.unsubscribeClick(handleClick)
-    }
+    if (drawingTool === 'none') return
+
+    chart.subscribeClick(handleClick)
+    return () => chart.unsubscribeClick(handleClick)
   }, [drawingTool, handleClick, setDrawingTool, setDrawingStep, clearCanvas])
 
-  const cursor = drawingTool !== 'none' && drawingTool !== 'erase'
+  const cursor = (drawingTool === 'trendline' || drawingTool === 'fibonacci')
     ? 'crosshair' : 'default'
 
   return (
     <div className="relative">
-      {/* 차트 */}
       <div
         id="chart-area"
         ref={containerRef}
@@ -399,38 +365,33 @@ export function ChartContainer() {
         style={{ cursor }}
       />
 
-      {/* 작도 미리보기 캔버스 — pointer-events:none 이라 차트 조작에 영향 없음 */}
+      {/* 작도 미리보기 캔버스 — pointer-events:none 이므로 차트 조작 영향 없음 */}
       <canvas
         ref={canvasRef}
         className="absolute top-0 left-0 pointer-events-none"
         style={{ height: CHART_HEIGHT, borderRadius: '1rem' }}
       />
 
-      {/* 로딩 */}
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center
                         bg-navi-surface/80 rounded-2xl backdrop-blur-sm z-20">
           <div className="flex flex-col items-center gap-2">
-            <div className="w-6 h-6 border-2 border-navi-accent border-t-transparent
-                            rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-navi-accent border-t-transparent rounded-full animate-spin" />
             <p className="text-xs text-navi-muted">실시간 데이터 불러오는 중...</p>
           </div>
         </div>
       )}
 
-      {/* 에러 */}
       {error && !isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center
-                        bg-navi-surface/90 rounded-2xl z-20">
+        <div className="absolute inset-0 flex items-center justify-center bg-navi-surface/90 rounded-2xl z-20">
           <p className="text-xs text-red-400">{error}</p>
         </div>
       )}
 
-      {/* 첫 번째 점 찍은 후 안내 배너 */}
       {drawingStep === 1 && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10
-                        flex items-center gap-2
-                        px-3.5 py-1.5 bg-amber-500/20 border border-amber-400/50
+                        flex items-center gap-2 px-3.5 py-1.5
+                        bg-amber-500/20 border border-amber-400/50
                         rounded-full pointer-events-none">
           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
           <span className="text-xs text-amber-300 font-medium">
